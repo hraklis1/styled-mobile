@@ -1,4 +1,4 @@
-import type { DailyLookCandidate, DailyLookMissingEssential } from '../../hooks/useDailyLook';
+import type { DailyLookBrief, DailyLookCandidate, DailyLookMissingEssential } from '../../hooks/useDailyLook';
 import type { Item } from '../../types/item';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemCoverPresentation } from '../../lib/itemImage';
@@ -45,4 +45,31 @@ export function itemPhotoUri(item: Item | undefined, opts?: { thumb?: boolean })
   if (cover.variant !== 'cutout') return cover.uri;
   if (opts?.thumb && item.thumbUrl) return resolveImageUri(item.thumbUrl);
   return resolveImageUri(item.imageUrl ?? item.polishedUrl);
+}
+
+/** The look's pieces: its items, or the owned foundation of an incomplete look. */
+export function candidatePieceIds(candidate: DailyLookCandidate): number[] {
+  const entries = candidate.itemIds.length ? candidate.itemIds : candidate.foundationItemIds;
+  return entries.map((entry) => entry.id);
+}
+
+/**
+ * The server's brief when it sent one; otherwise the closest equivalent we can
+ * derive, so an older backend still renders a coherent caption.
+ */
+export function resolveCandidateBrief(
+  candidate: DailyLookCandidate,
+  serverBrief: DailyLookBrief | null | undefined,
+  gap: DailyLookMissingEssential | undefined,
+): DailyLookBrief {
+  if (serverBrief) return serverBrief;
+  const hard = candidate.readinessStatus === 'priority';
+  return {
+    mode: !gap ? 'ready' : hard ? 'hard_gap' : 'soft_gap',
+    basis: null,
+    headline: candidateTitle(candidate, gap),
+    line: candidate.reason || null,
+    pieceIds: candidatePieceIds(candidate),
+    gap: gap ? { label: sentenceCase(gap.label), category: gap.category, severity: hard ? 'hard' : 'soft' } : null,
+  };
 }

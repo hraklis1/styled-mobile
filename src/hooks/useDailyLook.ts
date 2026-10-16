@@ -71,11 +71,25 @@ export type DailyLookResolveInput = {
   fallbackOutfitIds: number[];
   clientContextRevision: string;
   currentOutfitId?: number | null;
+  tempUnit?: 'C' | 'F';
+};
+
+/** Server-written Home caption (docs/today-look-v2.md in ../Styled). */
+export type DailyLookBrief = {
+  mode: 'ready' | 'soft_gap' | 'hard_gap';
+  basis: string | null;
+  headline: string;
+  line: string | null;
+  pieceIds: number[];
+  /** capped: shown on 3 of the last 7 days, so Home no longer mentions it. */
+  gap: { label: string; category: string; severity: 'soft' | 'hard'; capped?: boolean } | null;
 };
 
 export type DailyLookResolveResponse = {
   outcome: 'candidate' | 'none' | 'dismissed' | 'failed' | 'generating';
   candidate: DailyLookCandidate | null;
+  /** Absent from servers older than Today's Look v2. */
+  brief?: DailyLookBrief | null;
   candidateId?: number;
   fallbackOutfitId?: number | null;
 };
@@ -99,7 +113,7 @@ function normalizeCandidate(candidate: DailyLookCandidate | null): DailyLookCand
 
 export function useResolveDailyLook(input: DailyLookResolveInput | null, enabled: boolean) {
   return useQuery<DailyLookResolveResponse, Error>({
-    queryKey: [...DAILY_LOOK_QUERY_KEY, input?.localDate ?? null, input?.clientContextRevision ?? null],
+    queryKey: [...DAILY_LOOK_QUERY_KEY, input?.localDate ?? null, input?.clientContextRevision ?? null, input?.tempUnit ?? null],
     enabled: enabled && !!input,
     queryFn: () => api.post<DailyLookResolveResponse>('/api/home/daily-look/resolve', input).then((response) => ({
       ...response.data,

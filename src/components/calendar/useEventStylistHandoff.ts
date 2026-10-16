@@ -57,7 +57,7 @@ export function useEventStylistHandoff(navigation: TabNavigation) {
           if (!gap?.label) return;
           navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
             priority: shoppingPriorityFromDailyLookGap(gap),
-          }});
+          }, initial: false });
         },
         context: {
           kind: 'event',

@@ -195,5 +195,21 @@ test('home grid keeps a fixed artboard and routes owned piece taps', () => {
   act(() => buttons[0].props.onPress());
   expect(onPressItem).toHaveBeenCalledWith(1);
   expect(buttons[1].props.disabled).toBe(true);
-  expect(renderer.root.findAllByType(Text).some(node => Array.isArray(node.props.children) && node.props.children.join('') === '2 PIECES')).toBe(true);
+  // The picture is the count: no badge over the tiles.
+  expect(renderer.root.findAllByType(Text).some(node => /PIECES/.test([].concat(node.props.children).join('')))).toBe(false);
+});
+
+test('home grid shows a missing piece as a quiet ghost slot, not a product', () => {
+  const onPressSuggestion = jest.fn();
+  const renderer = render(<EditorialOutfitBoard grid width={300} maxHeight={320}
+    pieces={[{ id: 1, category: 'top', item: items[0] }]}
+    suggestion={{ label: 'Weatherproof layer', category: 'outerwear', offer: { imageUrl: 'https://example.com/coat.jpg', formattedPrice: 'CA$370.79', brand: 'MUSINSA' } }}
+    onPressSuggestion={onPressSuggestion} />);
+  const ghost = renderer.root.findAll(node => node.props.accessibilityLabel === 'Missing piece: Weatherproof layer. Not in your closet')[0];
+  expect(ghost).toBeTruthy();
+  const texts = renderer.root.findAllByType(Text).map(node => [].concat(node.props.children).join(''));
+  expect(texts).not.toContain('CA$370.79');
+  expect(texts).not.toContain('MUSINSA');
+  act(() => ghost.props.onPress());
+  expect(onPressSuggestion).toHaveBeenCalled();
 });

@@ -1,5 +1,5 @@
 import { daysWearingLook, luggageFitCopy, packingGroups, packingProgress, tripDayParts } from '../presentation';
-import { tripOnDate } from '../../../components/calendar/TripDayBand';
+import { tripOnDate } from '../../../components/calendar/tripDays';
 import { isTripPlanV2, type TripPlanV2, type TripSummary } from '../types';
 import type { Item } from '../../../types/item';
 

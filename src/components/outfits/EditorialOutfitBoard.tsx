@@ -38,6 +38,25 @@ function SuggestionTile({ suggestion, width, onPress, compact }: { suggestion: B
   </Pressable>;
 }
 
+/**
+ * Grid-mode stand-in for a piece you don't own: an outline of its shape and a
+ * quiet label. No product, price or brand: those live in the look's sheet.
+ */
+function GhostSlot({ suggestion, width, height, onPress }: { suggestion: BoardSuggestion; width: number; height: number; onPress?: () => void }) {
+  const art = Math.round(Math.min(width, height) * 0.38);
+  return <Pressable disabled={!onPress} onPress={onPress}
+    style={({ pressed }) => [{ width, height }, styles.ghost, pressed && styles.pressed]}
+    accessibilityRole={onPress ? 'button' : undefined}
+    accessibilityLabel={`Missing piece: ${suggestion.label}. Not in your closet`}
+    accessibilityHint={onPress ? 'See options for this piece' : undefined}>
+    <View style={{ opacity: 0.45 }}><CategorySilhouette category={suggestion.category} size={art} color={colors.inkSubtle} /></View>
+    <View style={styles.ghostLabelRow}>
+      <Ionicons name="add" size={13} color={colors.inkSubtle} accessible={false} />
+      <Text style={styles.ghostLabel} numberOfLines={2}>{suggestion.label}</Text>
+    </View>
+  </Pressable>;
+}
+
 type Props = {
   grid?: boolean;
   pieces: BoardPiece[];
@@ -69,13 +88,8 @@ export function EditorialOutfitBoard({ pieces, width: availableWidth, maxHeight,
         style={({ pressed }) => [{ width: tileWidth, height: tileHeight, backgroundColor: '#F6F3EE', borderRadius: 8, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }, pressed && styles.pressed]}>
         <Photo piece={piece} width={Math.min(tileWidth - 12, tileHeight - 12) / 1.25} foundation />
       </Pressable>)}
-      {suggestion ? <View style={{ width: tileWidth, height: tileHeight, overflow: 'hidden', borderRadius: 8 }}>
-        <SuggestionTile suggestion={suggestion} width={tileWidth} onPress={onPressSuggestion} compact />
-      </View> : null}
+      {suggestion ? <GhostSlot suggestion={suggestion} width={tileWidth} height={tileHeight} onPress={onPressSuggestion} /> : null}
       {Array.from({ length: Math.max(0, 4 - tiles.length - (suggestion ? 1 : 0)) }, (_, index) => <View key={`empty-${index}`} accessible={false} style={{ width: tileWidth, height: tileHeight, borderRadius: 8, backgroundColor: '#F6F3EE' }} />)}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 12, right: 12, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(246,243,238,0.94)' }}>
-        <Text style={{ ...typography.text.masthead, fontSize: 9, letterSpacing: 1 }}>{pieces.length} PIECES</Text>
-      </View>
     </View>;
   }
   // Account for captions and row gaps before sizing the artwork, never crop rows.
@@ -107,5 +121,8 @@ const styles = StyleSheet.create({
   suggestionName: { ...typography.text.bodySmall, color: colors.foreground, textAlign: 'center' },
   suggestionMeta: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center' },
   suggestionPrice: { ...typography.text.caption, color: colors.foreground, fontWeight: typography.weight.medium, textAlign: 'center' },
+  ghost: { borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.stitch, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.sm },
+  ghostLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 2, maxWidth: '100%' },
+  ghostLabel: { ...typography.text.caption, color: colors.inkSubtle, textAlign: 'center', flexShrink: 1 },
   pressed: { opacity: 0.7 },
 });

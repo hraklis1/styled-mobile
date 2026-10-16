@@ -174,3 +174,22 @@ export function buildUpcomingDays(events: Event[], todayStr: string, limit: numb
   }
   return days;
 }
+
+/**
+ * The event the agenda features: the first upcoming timed event, or an
+ * all-day one only once it has a look (shifts and reminders aren't outfits).
+ * Featured only today or tomorrow, so a quiet week doesn't lead with a card
+ * about something days away. `upcoming` is sorted and starts at today.
+ */
+export function heroEventFor(upcoming: Event[], todayStr: string): Event | null {
+  const tomorrow = new Date(`${todayStr}T12:00:00`);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = toDateStr(tomorrow);
+  for (const event of upcoming) {
+    const day = eventDayKey(event);
+    if (day > tomorrowStr) return null;
+    if (day < todayStr) continue;
+    if (!event.calendarMetadata?.allDay || (event.itemIds ?? []).length > 0) return event;
+  }
+  return null;
+}

@@ -10,7 +10,7 @@ import {
 import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { useReducedMotion } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
@@ -27,12 +27,12 @@ import { useOutfitLogs, useCreateOutfitLog } from '../../hooks/useOutfitLogs';
 import * as Haptics from '../../lib/haptics';
 import { isLookWornOn, buildDayThumbs, groupWearLogsByDay } from '../../components/calendar/calendar-presentation';
 import { CalendarSyncSheet } from '../../components/calendar/CalendarSyncSheet';
-import { WeekStrip } from '../../components/calendar/WeekStrip';
+import { STRIP_LAYOUT, WeekStrip } from '../../components/calendar/WeekStrip';
 import { EventFormModal } from '../../components/calendar/EventFormModal';
 import { EventDetailModal } from '../../components/calendar/EventDetailModal';
 import { EventItemPickerModal } from '../../components/calendar/EventItemPickerModal';
 import { EventOutfitPickerModal } from '../../components/calendar/EventOutfitPickerModal';
-import { AgendaEventRow, AllDayBanner } from '../../components/calendar/AgendaEventRow';
+import { AgendaEventRow, AllDayLine } from '../../components/calendar/AgendaEventRow';
 import { useEventStylistHandoff } from '../../components/calendar/useEventStylistHandoff';
 import { NextEventHero } from '../../components/calendar/NextEventHero';
 import { toDateStr } from '../../components/calendar/calendarUtils';
@@ -46,10 +46,10 @@ import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/Globa
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { track } from '../../lib/analytics';
 import { useTrips } from '../../hooks/useTrips';
-import { TripDayBand, tripOnDate } from '../../components/calendar/TripDayBand';
+import { tripDayLabel, tripOnDate } from '../../components/calendar/tripDays';
 import { TripDetailModal } from '../../components/trips/TripDetailModal';
-import { UpcomingTripsRow } from '../../components/trips/UpcomingTripsRow';
-import { pastTrips, tripProgressLabel, upcomingTrips } from '../../features/trips/presentation';
+import { pastTrips, tripCountdown, tripProgressLabel, upcomingTrips } from '../../features/trips/presentation';
+import type { TripSummary } from '../../features/trips/types';
 import { isTripLikeEvent, tripForEvent, tripPrefillFromEvent } from '../../features/trips/eventTrips';
 import { tripSpanLabel } from '../../features/stylist/workflows';
 import type { CalendarScreenProps } from '../../navigation/types';
@@ -61,6 +61,7 @@ import {
   buildAgendaWindow,
   buildPlanningStatusMap,
   windowCountsForDate,
+  heroEventFor,
 } from '../../components/calendar/calendarAgenda';
 
 const FREE_EVENT_LIMIT = 5;
@@ -84,7 +85,6 @@ const FUTURE_PAGE = 30;
 const PAST_PAGE = 14;
 
 type CalendarTimelineItem =
-  | { kind: 'earlier'; key: string }
   | { kind: 'day-heading'; key: string; date: string }
   | { kind: 'loading'; key: string }
   | { kind: 'error'; key: string }
@@ -93,8 +93,18 @@ type CalendarTimelineItem =
   | { kind: 'hero'; key: string; date: string; event: Event }
   // An empty day the user chose keeps its date-specific add-event and wear-log actions.
   | { kind: 'day-placeholder'; key: string; date: string; isPast: boolean }
-  | { kind: 'all-day'; key: string; date: string; event: Event }
+  // A day's unplanned all-day entries share one quiet line.
+  | { kind: 'all-day-line'; key: string; date: string; events: Event[] }
+  // Today has only all-day entries: a quiet prompt instead of a hero.
+  | { kind: 'today-prompt'; key: string; date: string }
+  // Departure day with nothing timed to dress for: the trip is the hero.
+  | { kind: 'trip-hero'; key: string; date: string; trip: TripSummary }
   | { kind: 'event'; key: string; date: string; event: Event };
+
+// Rows that share their day's card. The hero, empty-day prompts and trip
+// hero carry their own surfaces.
+const CARDED = new Set<CalendarTimelineItem['kind']>(['all-day-line', 'today-prompt', 'event']);
+type CardPlace = { first: boolean; last: boolean; today: boolean; trip: boolean };
 
 const itemDate = (item: CalendarTimelineItem): string | null => ('date' in item ? item.date : null);
 
@@ -135,7 +145,10 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { data: trips = [] } = useTrips();
   const [openTripId, setOpenTripId] = useState<number | null>(null);
   const openTrip = trips.find((trip) => trip.id === openTripId);
-  const [pastTripsVisible, setPastTripsVisible] = useState(false);
+  const [tripsSheetVisible, setTripsSheetVisible] = useState(false);
+  const [addMenuVisible, setAddMenuVisible] = useState(false);
+  // Days whose all-day line is expanded into one line per entry.
+  const [expandedAllDay, setExpandedAllDay] = useState<ReadonlySet<string>>(() => new Set());
   const { openLogger } = useGlobalOutfitLogger();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
@@ -196,6 +209,12 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   // While the list moves on its own, its scroll must not feed back into the
   // strip. Cleared as soon as the user touches the list again.
   const programmaticScroll = useRef(false);
+  // Earlier days load as the user scrolls up past today. Only a user drag
+  // counts, so mounting at the top (or a tab re-tap) doesn't page history in.
+  const userDragged = useRef(false);
+  // Anchoring keeps the visible rows still while older days are prepended;
+  // explicit date jumps turn it back off since they own the scroll position.
+  const [anchorPrepends, setAnchorPrepends] = useState(false);
 
   const upcoming = useMemo(
     () => sortCalendarEvents(events.filter((event) => eventDayKey(event) >= todayStr)),
@@ -233,6 +252,19 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   );
 
   const nextEvent = upcoming[0] ?? null;
+  const heroEvent = useMemo(() => heroEventFor(upcoming, todayStr), [upcoming, todayStr]);
+  const tripShelf = useMemo(() => upcomingTrips(trips, todayStr), [trips, todayStr]);
+  const tripArchive = useMemo(() => pastTrips(trips, todayStr), [trips, todayStr]);
+  // A trip leaving today or tomorrow leads the agenda when that day has
+  // nothing timed to dress for.
+  const departingTrip = useMemo(() => {
+    const tomorrow = new Date(`${todayStr}T12:00:00`);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const trip = tripShelf.find((candidate) => candidate.startDate === todayStr || candidate.startDate === toDateStr(tomorrow));
+    if (!trip) return null;
+    const busy = events.some((event) => eventDayKey(event) === trip.startDate && !event.calendarMetadata?.allDay);
+    return busy ? null : trip;
+  }, [tripShelf, todayStr, events]);
   const agenda = useMemo(
     () => buildAgendaWindow(events, { todayStr, pastDayCount, futureDayCount, pinnedDate }),
     [events, todayStr, pastDayCount, futureDayCount, pinnedDate],
@@ -242,28 +274,74 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     if (isError) return [{ kind: 'error', key: 'error' }];
     if (!events.length && !pinnedDate) return [{ kind: 'empty', key: 'empty' }];
     const items: CalendarTimelineItem[] = [];
-    if (agenda.earlierCount > 0) items.push({ kind: 'earlier', key: 'earlier' });
     let shownNoUpcoming = false;
+    let shownTripHero = false;
+    // The calendar event a trip plan was made from is the trip; on the trip's
+    // own days its heading already says so.
+    const coveredByTrip = (event: Event, date: string) => {
+      if (!isTripLikeEvent(event)) return false;
+      const linked = tripForEvent(trips, event.id);
+      return !!linked && tripOnDate(trips, date)?.id === linked.id;
+    };
     for (const day of agenda.days) {
       if (!nextEvent && !shownNoUpcoming && day.date >= todayStr) {
         items.push({ kind: 'no-upcoming', key: 'no-upcoming' });
         shownNoUpcoming = true;
       }
       const { date } = day;
+      if (departingTrip && !shownTripHero && date >= todayStr) {
+        items.push({ kind: 'trip-hero', key: `trip-hero-${departingTrip.id}`, date: todayStr, trip: departingTrip });
+        shownTripHero = true;
+      }
       items.push({ kind: 'day-heading', key: `day-${date}`, date });
-      if (!day.allDay.length && !day.timed.length) {
-        items.push({ kind: 'day-placeholder', key: `empty-${date}`, date, isPast: date < todayStr });
+      const allDay = day.allDay.filter((event) => !coveredByTrip(event, date));
+      const timed = day.timed.filter((event) => !coveredByTrip(event, date));
+      if (!allDay.length && !timed.length) {
+        // A day whose only entry is the trip itself is covered by its heading.
+        if (!day.allDay.length && !day.timed.length) {
+          items.push({ kind: 'day-placeholder', key: `empty-${date}`, date, isPast: date < todayStr });
+        }
         continue;
       }
-      for (const event of [...day.allDay, ...day.timed]) {
-        if (event.id === nextEvent?.id) items.push({ kind: 'hero', key: `event-${event.id}`, date, event });
-        else if (event.calendarMetadata?.allDay) items.push({ kind: 'all-day', key: `event-${event.id}`, date, event });
+      // An all-day entry with a look is an outfit like any other: a full row.
+      const quiet = allDay.filter((event) => !(event.itemIds ?? []).length);
+      const featured = [...allDay.filter((event) => (event.itemIds ?? []).length), ...timed];
+      if (quiet.length) items.push({ kind: 'all-day-line', key: `allday-${date}`, date, events: quiet });
+      if (date === todayStr && !featured.length && !shownTripHero) {
+        items.push({ kind: 'today-prompt', key: 'today-prompt', date });
+      }
+      for (const event of featured) {
+        if (event.id === heroEvent?.id) items.push({ kind: 'hero', key: `event-${event.id}`, date, event });
         else items.push({ kind: 'event', key: `event-${event.id}`, date, event });
       }
     }
     if (!nextEvent && !shownNoUpcoming) items.push({ kind: 'no-upcoming', key: 'no-upcoming' });
     return items;
-  }, [events.length, isLoading, isError, agenda, nextEvent, todayStr, pinnedDate]);
+  }, [events.length, isLoading, isError, agenda, nextEvent, heroEvent, departingTrip, trips, todayStr, pinnedDate]);
+
+  // Where each carded row sits in its day's card, so consecutive rows render
+  // as one surface with rounded ends.
+  const cardPlaces = useMemo(() => {
+    const places = new Map<string, CardPlace>();
+    timelineItems.forEach((item, index) => {
+      if (!CARDED.has(item.kind) || !('date' in item)) return;
+      const prev = timelineItems[index - 1];
+      const next = timelineItems[index + 1];
+      places.set(item.key, {
+        first: !prev || !CARDED.has(prev.kind),
+        last: !next || !CARDED.has(next.kind),
+        today: item.date === todayStr,
+        trip: !!tripOnDate(trips, item.date),
+      });
+    });
+    return places;
+  }, [timelineItems, todayStr, trips]);
+
+  // Day headings stay pinned while their day scrolls under them.
+  const stickyHeaderIndices = useMemo(
+    () => timelineItems.flatMap((item, index) => (item.kind === 'day-heading' ? [index] : [])),
+    [timelineItems],
+  );
 
   // Land on a requested date once the timeline contains it.
   useEffect(() => {
@@ -442,6 +520,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     const needed = windowCountsForDate(events, date, todayStr);
     setPastDayCount((count) => Math.max(count, needed.past));
     setFutureDayCount((count) => Math.max(count, needed.future + 1));
+    setAnchorPrepends(false);
     setScrollRequest({ date });
   }, [events, planningStatus, showWeekOf, todayStr]);
 
@@ -487,14 +566,11 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 
   const isWorn = (event: Event) => isLookWornOn(logsByDay.get(eventDayKey(event)) ?? [], event.itemIds, eventDayKey(event));
 
-  // What a past event's day actually saw: the planned look if it was logged,
-  // otherwise the day's first wear log.
-  const wornItemIdsFor = (event: Event): number[] | null => {
-    const logs = logsByDay.get(eventDayKey(event));
-    if (!logs?.length) return null;
-    if (isWorn(event)) return event.itemIds!;
-    return logs[0].itemIds.length ? logs[0].itemIds : null;
-  };
+  // A past event counts as worn only when its own planned look was logged. A
+  // day-level wear log can't be attributed to one event among several, and
+  // showing it would contradict what tapping the slot opens.
+  const wornItemIdsFor = (event: Event): number[] | null =>
+    isWorn(event) ? event.itemIds! : null;
 
   // An open day is a styling opportunity, not a blank: weekends get a
   // weekend look, weekdays a look for that day.
@@ -527,19 +603,21 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     );
   };
 
-  const tripsToday = toDateStr(new Date());
-  const tripShelf = useMemo(() => upcomingTrips(trips, tripsToday), [trips, tripsToday]);
-  const tripArchive = useMemo(() => pastTrips(trips, tripsToday), [trips, tripsToday]);
 
   // The trip brief opens over a fresh stylist thread; a future selected day
   // becomes the first day of the trip.
-  const planTrip = useCallback((source: 'calendar_trips' | 'calendar_menu') => {
+  const planTrip = useCallback((source: 'calendar_trips' | 'calendar_menu' | 'calendar_add') => {
     track('trip_plan_started', { source });
     openStylist({
       source: 'calendar_card',
-      workflow: { kind: 'trip', startDate: selectedDate > tripsToday ? selectedDate : undefined },
+      workflow: { kind: 'trip', startDate: selectedDate > todayStr ? selectedDate : undefined },
     });
-  }, [openStylist, selectedDate, tripsToday]);
+  }, [openStylist, selectedDate, todayStr]);
+
+  const openTripFrom = (trip: TripSummary, source: string) => {
+    track('trip_opened', { source });
+    setOpenTripId(trip.id);
+  };
 
   const openCalendarUtilities = useCallback(() => {
     setCalendarMenuVisible(true);
@@ -549,29 +627,29 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 
   const renderTimelineItem = ({ item, target }: { item: CalendarTimelineItem; target?: string }) => {
     switch (item.kind) {
-      case 'earlier':
-        return (
-          <TouchableOpacity
-            style={styles.earlier}
-            onPress={() => setPastDayCount((count) => count + PAST_PAGE)}
-            accessibilityRole="button"
-            accessibilityLabel="Show earlier days"
-          >
-            <Ionicons name="chevron-up" size={14} color={colors.mutedForeground} />
-            <Text style={styles.earlierText}>Earlier</Text>
-          </TouchableOpacity>
-        );
       case 'day-heading': {
         const heading = agendaDayHeading(item.date);
         const [prefix, rest] = heading.includes(' · ') ? heading.split(' · ') : [null, heading];
         const trip = tripOnDate(trips, item.date);
-        const title = (
-          <Text accessibilityRole="header" style={styles.dayHeading}>
-            {prefix ? <Text style={item.date === todayStr ? styles.dayHeadingToday : undefined}>{prefix} · </Text> : null}
-            {rest}
-          </Text>
+        return (
+          <View style={styles.dayHeadingRow}>
+            <Text accessibilityRole="header" style={styles.dayHeading} numberOfLines={1}>
+              {prefix ? <Text style={item.date === todayStr ? styles.dayHeadingToday : undefined}>{prefix} · </Text> : null}
+              {rest}
+            </Text>
+            {trip ? (
+              <TouchableOpacity
+                style={styles.dayTrip}
+                onPress={() => openTripFrom(trip, 'calendar_day')}
+                accessibilityRole="button"
+                accessibilityLabel={`${tripDayLabel(trip, item.date)}. Open trip`}
+              >
+                <Ionicons name={item.date === trip.startDate ? 'airplane-outline' : 'briefcase-outline'} size={12} color={colors.accentInk} />
+                <Text style={styles.dayTripText} numberOfLines={1}>{tripDayLabel(trip, item.date)}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         );
-        return trip ? <View>{title}<TripDayBand trip={trip} date={item.date} onPress={() => setOpenTripId(trip.id)} /></View> : title;
       }
       case 'loading':
         return <CalendarLoadingSkeleton />;
@@ -698,11 +776,60 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             isPlanning={false}
           />
         );
-      case 'all-day':
-      case 'event': {
-        const Row = item.kind === 'all-day' ? AllDayBanner : AgendaEventRow;
+      case 'all-day-line':
         return (
-          <Row
+          <AllDayLine
+            events={item.events}
+            past={item.date < todayStr}
+            expanded={expandedAllDay.has(item.date)}
+            onToggle={() => setExpandedAllDay((current) => new Set(current).add(item.date))}
+            onPressEvent={(event) => setDetailEvent(event)}
+          />
+        );
+      case 'today-prompt':
+        return (
+          <View style={styles.todayPrompt}>
+            <Text style={styles.todayPromptText}>Nothing to dress for yet. What are you wearing today?</Text>
+            <View style={styles.todayPromptActions}>
+              <TouchableOpacity style={styles.textAction} onPress={() => openStylistForFreeDay(item.date)} accessibilityRole="button" accessibilityLabel="Style today's look">
+                <Ionicons name="sparkles-outline" size={14} color={colors.accentInk} />
+                <Text style={styles.textActionLabel}>Style today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.textAction} onPress={() => handleLogWear(item.date)} accessibilityRole="button" accessibilityLabel="Log what you wore today">
+                <Ionicons name="checkmark-done-outline" size={14} color={colors.accentInk} />
+                <Text style={styles.textActionLabel}>Log wear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      case 'trip-hero': {
+        const { trip } = item;
+        const packing = trip.packable > 0
+          ? (trip.packed >= trip.packable ? 'All packed' : `${trip.packed} of ${trip.packable} packed`)
+          : tripProgressLabel(trip);
+        return (
+          <TouchableOpacity
+            style={styles.tripHero}
+            onPress={() => openTripFrom(trip, 'calendar_trip_hero')}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Leaving for ${trip.destination}, ${tripCountdown(trip, todayStr)}, ${packing}. Open trip`}
+          >
+            <Text style={styles.tripHeroOverline}>{tripCountdown(trip, todayStr)}</Text>
+            <Text style={styles.tripHeroTitle} numberOfLines={1}>Leaving for {trip.destination}</Text>
+            <View style={styles.tripHeroFooter}>
+              <Text style={styles.tripHeroMeta}>{packing}</Text>
+              <View style={styles.textAction}>
+                <Text style={styles.textActionLabel}>Pack</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.foreground} />
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      }
+      case 'event':
+        return (
+          <AgendaEventRow
             event={item.event}
             allItems={allItems}
             outfit={outfitFor(item.event)}
@@ -711,15 +838,15 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             onPlan={() => planFromAgenda(item.event, 'calendar_card')}
             past={item.date < todayStr}
             wornItemIds={item.date <= todayStr ? wornItemIdsFor(item.event) : null}
+            divider={false}
           />
         );
-      }
     }
   };
 
   return (
     <View style={styles.root}>
-      <View style={[styles.stripArea, { paddingTop: insets.top }]}>
+      <Animated.View style={[styles.stripArea, { paddingTop: insets.top }]} layout={reducedMotion ? undefined : STRIP_LAYOUT}>
         <WeekStrip
           weekDays={weekDays}
           selectedDate={selectedDate}
@@ -736,39 +863,59 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             if (calendarExpanded) setMonthOffset(0);
           }}
           onChangeMonthOffset={(delta) => setMonthOffset((value) => value + delta)}
-          onAddEvent={handleAddEvent}
+          onAddEvent={() => setAddMenuVisible(true)}
           onMore={openCalendarUtilities}
           dayThumbs={dayThumbs}
+          trips={trips}
+          onOpenTrip={(tripId) => { track('trip_opened', { source: 'calendar_strip' }); setOpenTripId(tripId); }}
         />
-        {trips.length > 0 ? (
-          <UpcomingTripsRow
-            trips={tripShelf}
-            pastCount={tripArchive.length}
-            today={tripsToday}
-            onOpen={(trip) => { track('trip_opened', { source: 'calendar_trips' }); setOpenTripId(trip.id); }}
-            onPlan={() => planTrip('calendar_trips')}
-            onPast={() => setPastTripsVisible(true)}
-          />
-        ) : null}
-      </View>
-      <View style={styles.listArea}>
+      </Animated.View>
+      {/* Eases with the strip so the list never jumps when the month opens. */}
+      <Animated.View style={styles.listArea} layout={reducedMotion ? undefined : STRIP_LAYOUT}>
         <FlashList
           ref={flashListRef}
           data={timelineItems}
-          renderItem={renderTimelineItem}
+          // Page padding lives on each cell: a pinned heading is drawn outside
+          // the content container's padding.
+          renderItem={(info) => {
+            const place = cardPlaces.get(info.item.key);
+            if (!place) return <View style={styles.cell}>{renderTimelineItem(info)}</View>;
+            return (
+              <View style={styles.cell}>
+                <View
+                  style={[
+                    styles.dayCard,
+                    place.trip && styles.dayCardTrip,
+                    place.today && styles.dayCardToday,
+                    place.first ? styles.dayCardFirst : styles.dayCardJoin,
+                    place.last && styles.dayCardLast,
+                  ]}
+                >
+                  {place.first ? null : <View style={styles.dayCardRule} />}
+                  {renderTimelineItem(info)}
+                </View>
+              </View>
+            );
+          }}
           keyExtractor={(item) => item.key}
           getItemType={(item) => item.kind}
-          // Explicit date jumps own the scroll position; automatic anchoring
-          // can counteract them as rows load.
-          maintainVisibleContentPosition={{ disabled: true }}
+          stickyHeaderIndices={stickyHeaderIndices}
+          // Explicit date jumps own the scroll position; anchoring is only on
+          // while scrolling up into history.
+          maintainVisibleContentPosition={{ disabled: !anchorPrepends }}
           style={styles.flex}
           contentContainerStyle={[
-            styles.scrollContent,
             { paddingBottom: spacing.xxxl * 2 + insets.bottom },
           ]}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="never"
-          onScrollBeginDrag={() => { programmaticScroll.current = false; }}
+          onScrollBeginDrag={() => { programmaticScroll.current = false; userDragged.current = true; }}
+          onStartReached={() => {
+            if (!userDragged.current || agenda.earlierCount === 0) return;
+            setAnchorPrepends(true);
+            setPastDayCount((count) => count + PAST_PAGE);
+          }}
+          onStartReachedThreshold={0.5}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
           onEndReached={() => {
@@ -783,7 +930,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             />
           }
         />
-      </View>
+      </Animated.View>
 
       {/* Modals */}
       <EventDetailModal
@@ -845,23 +992,35 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         subtitle="Keep your wardrobe plan up to date."
         options={[
           { label: 'Log wear', icon: 'shirt-outline', onPress: () => handleLogWear(selectedDate) },
+          ...(trips.length ? [{ label: 'Trips', icon: 'briefcase-outline' as const, onPress: () => setTripsSheetVisible(true) }] : []),
           { label: 'Plan a trip', icon: 'airplane-outline', onPress: () => planTrip('calendar_menu') },
           { label: 'Calendars & sync', icon: 'calendar-outline', onPress: () => setSyncVisible(true) },
         ]}
         onClose={() => setCalendarMenuVisible(false)}
       />
       <ActionMenuSheet
-        visible={pastTripsVisible}
+        visible={addMenuVisible}
         deferSelectionUntilDismissed
         compact
-        title="Past trips"
-        options={tripArchive.map((trip) => ({
+        title="Add to your calendar"
+        options={[
+          { label: 'Event', subtitle: 'An occasion to dress for', icon: 'calendar-outline', onPress: () => { void handleAddEvent(); } },
+          { label: 'Trip', subtitle: 'Day-by-day looks and a packing list', icon: 'airplane-outline', onPress: () => planTrip('calendar_add') },
+        ]}
+        onClose={() => setAddMenuVisible(false)}
+      />
+      <ActionMenuSheet
+        visible={tripsSheetVisible}
+        deferSelectionUntilDismissed
+        compact
+        title="Trips"
+        options={[...tripShelf, ...tripArchive].map((trip) => ({
           label: trip.destination,
-          subtitle: `${tripSpanLabel(trip.startDate, trip.endDate)?.range ?? trip.startDate} · ${trip.looks} ${trip.looks === 1 ? 'look' : 'looks'}`,
-          icon: 'briefcase-outline',
-          onPress: () => setOpenTripId(trip.id),
+          subtitle: `${tripSpanLabel(trip.startDate, trip.endDate)?.range ?? trip.startDate} · ${trip.endDate < todayStr ? `${trip.looks} ${trip.looks === 1 ? 'look' : 'looks'}` : `${tripCountdown(trip, todayStr)} · ${tripProgressLabel(trip)}`}`,
+          icon: trip.endDate < todayStr ? 'briefcase-outline' : 'airplane-outline',
+          onPress: () => openTripFrom(trip, 'calendar_trips'),
         }))}
-        onClose={() => setPastTripsVisible(false)}
+        onClose={() => setTripsSheetVisible(false)}
       />
       <TripDetailModal
         tripId={openTripId}
@@ -880,7 +1039,29 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.page },
+  cell: { paddingHorizontal: spacing.page },
+  // One soft surface per day: separation without a box around every row.
+  dayCard: {
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.card,
+    borderLeftWidth: StyleSheet.hairlineWidth, borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  dayCardTrip: { backgroundColor: '#FCFAF7' },
+  dayCardToday: { borderColor: 'rgba(111,89,72,0.28)' },
+  dayCardFirst: {
+    paddingTop: spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 18, borderTopRightRadius: 18,
+  },
+  // Rows after the first are divided by an inset rule drawn by the card.
+  dayCardJoin: { borderTopWidth: 0 },
+  dayCardRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline },
+  dayCardLast: {
+    paddingBottom: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomLeftRadius: 18, borderBottomRightRadius: 18,
+  },
 
   stripArea: {
     paddingHorizontal: spacing.page,
@@ -890,18 +1071,34 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   listArea: { flex: 1, overflow: 'hidden' },
-  dayHeading: {
-    ...typography.text.label,
-    color: colors.mutedForeground,
-    marginTop: spacing.xl,
-    marginBottom: spacing.sm,
+  // Opaque so a pinned heading covers the rows scrolling beneath it.
+  dayHeadingRow: {
+    flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm,
+    paddingTop: spacing.xl, paddingBottom: spacing.sm,
+    // Full-bleed, so rows don't show in the gutters while it's pinned.
+    marginHorizontal: -spacing.page, paddingHorizontal: spacing.page,
+    backgroundColor: colors.background,
   },
+  dayHeading: { ...typography.text.label, color: colors.mutedForeground, flexShrink: 0 },
+  dayTrip: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 24 },
+  dayTripText: { ...typography.text.caption, color: colors.accentInk, flexShrink: 1 },
+  todayPrompt: { gap: spacing.xs, paddingTop: spacing.md },
+  todayPromptText: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  todayPromptActions: { flexDirection: 'row', gap: spacing.lg },
+  textAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44 },
+  textActionLabel: { ...typography.text.label, color: colors.accentInk },
+  tripHero: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs,
+    gap: spacing.xs,
+    borderRadius: 20, borderCurve: 'continuous',
+    backgroundColor: colors.accent,
+  },
+  tripHeroOverline: { ...typography.text.eyebrowLarge, color: colors.accentInk },
+  tripHeroTitle: { ...typography.text.editorialTitle, color: colors.foreground },
+  tripHeroFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tripHeroMeta: { ...typography.text.caption, color: colors.accentInk, fontWeight: typography.weight.medium },
   dayHeadingToday: { color: colors.accentInk },
-  earlier: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    minHeight: 44, marginTop: spacing.sm,
-  },
-  earlierText: { ...typography.text.caption, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
   freeDay: {
     gap: spacing.xs,

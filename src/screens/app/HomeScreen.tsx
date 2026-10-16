@@ -62,7 +62,7 @@ import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyL
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
 import { EditorialOutfitBoard } from '../../components/outfits/EditorialOutfitBoard';
 import { resolveBoardPieces } from '../../components/outfits/editorialBoardLayout';
-import { candidateTitle, sentenceCase, capitalizeFirst, gapLabel } from '../../components/home/dailyLookCopy';
+import { resolveCandidateBrief, sentenceCase, capitalizeFirst, gapLabel } from '../../components/home/dailyLookCopy';
 import {
   LookMat,
   LookMatAction,
@@ -496,11 +496,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       history: dailyPickHistory,
       rankedOutfitIds: rankedDailyPicks.map((entry) => entry.outfit.id),
       currentOutfitId: dailyPick?.outfit.id ?? null,
+      tempUnit: tempUnit === 'C' ? 'C' : 'F',
       items,
       outfits,
       events,
     });
-  }, [dailyLookDecision, dailyLookLocation, dailyPick?.outfit.id, dailyPickDate, dailyPickHistory, events, items, outfits, rankedDailyPicks, weather.data]);
+  }, [dailyLookDecision, dailyLookLocation, dailyPick?.outfit.id, dailyPickDate, dailyPickHistory, events, items, outfits, rankedDailyPicks, tempUnit, weather.data]);
   const dailyLookQuery = useResolveDailyLook(
     dailyLookInput,
     isPremium && dailyPickHistoryLoaded && !weather.isLoading && !stylingLocation.isLoading,
@@ -579,20 +580,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     ? dailyLookPresentation.gap
     : undefined;
   const candidateHasFlatLay = generatedCandidate?.readinessStatus === 'ready' && !!generatedCandidate.aiGeneratedImageUrl;
-  // The board's suggestion tile shows a real, in-stock product when the edit
-  // has one. Same query (and cache entry) the daily-look sheet reads.
-  const gapEdit = useShoppingPriorityEdit(
+  // Home shows the gap as a quiet slot; the listing lives in the daily-look
+  // sheet. Warm the same query (and cache entry) so the sheet opens filled.
+  useShoppingPriorityEdit(
     shoppingPriorityFromDailyLookGap(candidateGap ?? IDLE_GAP),
     { origin: 'daily_look', enabled: !!candidateGap && !candidateHasFlatLay },
   );
-  const suggestionOffer = (() => {
-    if (gapEdit.data?.status === 'no_buy') return undefined;
-    for (const target of gapEdit.data?.targets ?? []) {
-      const offer = target.offers?.find((candidate) => candidate.inStock !== false && candidate.imageUrl);
-      if (offer?.imageUrl) return { imageUrl: offer.imageUrl, formattedPrice: offer.formattedPrice, brand: offer.brand ?? offer.merchant };
-    }
-    return undefined;
-  })();
+  const candidateBrief = generatedCandidate
+    ? resolveCandidateBrief(generatedCandidate, dailyLookQuery.data?.brief, candidateGap)
+    : null;
+  // A saved outfit the server picked for today comes with its own brief.
+  const ownedBrief = featuredOutfit && dailyLookQuery.data?.fallbackOutfitId === featuredOutfit.id
+    ? dailyLookQuery.data?.brief ?? null
+    : null;
+  const candidateNote = candidateBrief?.line
+    ? candidateBrief.line
+    : undefined;
   const hasHomeCollage = !dailyLookIsPreparing && (generatedCandidate
     ? !candidateHasFlatLay
     : !!featuredOutfit && !featuredOutfit.aiGeneratedImageUrl);
@@ -747,6 +750,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         origin: 'daily_look',
         priority: shoppingPriorityFromDailyLookGap(candidateGap),
       },
+      initial: false,
     });
   };
 
@@ -865,7 +869,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
                 origin: 'daily_look',
                 priority: shoppingPriorityFromDailyLookGap(gap),
-              }});
+              }, initial: false });
             },
           });
         }}
@@ -908,20 +912,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <View style={{ width: plate.width, height: plate.height, backgroundColor: '#F5F2EB' }}>
                 <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width} maxHeight={plate.height} grid
                   onPressItem={openDailyLookItem}
-                  suggestion={candidateGap ? { label: sentenceCase(candidateGap.label), category: candidateGap.category, offer: suggestionOffer } : undefined}
+                  suggestion={candidateGap ? { label: sentenceCase(candidateGap.label), category: candidateGap.category } : undefined}
                   onPressSuggestion={handleDailyLookFindPiece} />
               </View>
             )}
-            eyebrow={generatedCandidate.readinessStatus === 'incomplete'
-              ? 'Suggested addition'
-              : generatedCandidate.readinessStatus === 'priority'
-                ? 'Suggested addition'
-                : undefined}
-            title={candidateTitle(generatedCandidate, candidateGap)}
-            note={`${generatedCandidate.itemIds.length} pieces${weather.data ? ` · Chosen for ${formatTemp(weather.data.current, tempUnit)}` : ''}`}
+            eyebrow={candidateBrief?.basis ?? undefined}
+            title={candidateBrief?.headline ?? generatedCandidate.name}
+            note={candidateNote}
             onOpen={() => openDailyLookSheet('look')}
-            accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
-            captionAccessibilityLabel={candidateHasFlatLay ? `Open ${candidateTitle(generatedCandidate, candidateGap)}` : `Look details: ${candidateTitle(generatedCandidate, candidateGap)}`}
+            accessibilityLabel={`${candidateBrief?.headline ?? generatedCandidate.name}. ${candidateBrief?.line ?? generatedCandidate.reason}. Open details`}
+            captionAccessibilityLabel={candidateHasFlatLay ? `Open ${candidateBrief?.headline}` : `Look details: ${candidateBrief?.headline}`}
             action={candidateGap && !candidateHasFlatLay ? undefined : candidateGap ? (
               <LookMatAction
                 icon="bag-outline"
@@ -956,8 +956,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width} maxHeight={plate.height} grid onPressItem={openDailyLookItem} />
               </View>
             )}
-            title={featuredOutfit.name}
-            note={`${featuredOutfit.itemIds.length} pieces${weather.data ? ` · Chosen for ${formatTemp(weather.data.current, tempUnit)}` : ''}`}
+            eyebrow={ownedBrief?.basis ?? undefined}
+            title={ownedBrief?.headline ?? featuredOutfit.name}
+            note={ownedBrief?.line ?? featuredExplanation ?? featuredReason}
             onOpen={() => navigation.navigate('Closet', {
               screen: 'OutfitDetail',
               params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
@@ -1091,6 +1092,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           navigation.navigate('Shop', {
             screen: 'ShoppingGallery',
             params: { catalogFilter: 'active', returnTo: 'Home' },
+            initial: false,
           });
         }}
       />
@@ -1128,6 +1130,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <DailyLookDetailSheet
         visible={dailyLookSheetVisible && !!generatedCandidate}
         candidate={generatedCandidate}
+        brief={candidateBrief}
         mode={dailyLookSheetMode}
         sessionKey={dailyLookSheetSession}
         items={items}

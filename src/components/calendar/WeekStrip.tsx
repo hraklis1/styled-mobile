@@ -5,21 +5,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
 import { toDateStr } from './calendarUtils';
-import Animated, { FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, spacing, typography, radii, motion } from '../../theme';
 import { PressableScale } from '../primitives/PressableScale';
 import { Image } from 'expo-image';
 import { IconButton } from '../primitives/Editorial';
 import * as Haptics from '../../lib/haptics';
 import type { DayPlanningStatus } from './calendarAgenda';
+import { tripDayLabel, tripOnDate } from './tripDays';
+import type { TripSummary } from '../../features/trips/types';
 
 const MONTH_ROW_HEIGHT = 48;
 const THUMB = 36;
 // Walnut at reduced strength: a grid full of open days should read as quiet.
 const NEEDS_RING = 'rgba(111,89,72,0.42)';
 
+const TRIP_INSET = 10;
 const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const PILL_SPRING = { damping: 20, stiffness: 220 };
+
+const REVEAL_EASING = Easing.bezier(0.2, 0, 0, 1);
+export const STRIP_LAYOUT = LinearTransition.duration(motion.base).easing(REVEAL_EASING);
 
 export function WeekStrip({
   weekDays,
@@ -36,6 +42,8 @@ export function WeekStrip({
   onAddEvent,
   onMore,
   dayThumbs,
+  trips = [],
+  onOpenTrip,
 }: {
   weekDays: Date[];
   selectedDate: string | null;
@@ -53,6 +61,9 @@ export function WeekStrip({
   onMore: () => void;
   /** Lead-piece image for days with a planned look (month grid only). */
   dayThumbs?: Map<string, string>;
+  /** Trips draw as a span under their dates instead of cards in the agenda. */
+  trips?: TripSummary[];
+  onOpenTrip?: (tripId: number) => void;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const [daysWidth, setDaysWidth] = useState(0);
@@ -87,6 +98,13 @@ export function WeekStrip({
     }
     pillOpacity.value = reducedMotion ? (visible ? 1 : 0) : withTiming(visible ? 1 : 0, { duration: motion.quick });
   }, [selectedIndex, weekKey, cellWidth, reducedMotion, pillX, pillOpacity]);
+  // The chevron turns rather than swapping glyphs, in step with the reveal.
+  const chevronTurn = useSharedValue(expanded ? 1 : 0);
+  useEffect(() => {
+    chevronTurn.value = reducedMotion ? (expanded ? 1 : 0) : withTiming(expanded ? 1 : 0, { duration: motion.base, easing: REVEAL_EASING });
+  }, [expanded, reducedMotion, chevronTurn]);
+  const chevronStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${chevronTurn.value * 180}deg` }] }));
+
   const pillStyle = useAnimatedStyle(() => ({
     opacity: pillOpacity.value,
     transform: [{ translateX: pillX.value }],
@@ -142,14 +160,43 @@ export function WeekStrip({
   const weekGesture = useMemo(
     () => Gesture.Pan()
       .activeOffsetX([-24, 24])
-      .failOffsetY([-14, 14])
-      .onEnd(({ translationX, velocityX }) => {
+      .activeOffsetY([-14, 14])
+      .onEnd(({ translationX, translationY, velocityX, velocityY }) => {
+        // Sideways pages the week; pulling down opens the month.
+        if (Math.abs(translationY) > Math.abs(translationX)) {
+          if (translationY > 32 || velocityY > 480) scheduleOnRN(onToggleExpanded);
+          return;
+        }
         const intent = Math.abs(translationX) > 48 || Math.abs(velocityX) > 480;
         if (!intent) return;
         if (translationX < 0) scheduleOnRN(onNextWeek);
         else scheduleOnRN(onPrevWeek);
       }),
-    [onNextWeek, onPrevWeek],
+    [onNextWeek, onPrevWeek, onToggleExpanded],
+  );
+
+  // Contiguous runs of this week's days that one trip covers.
+  const tripSegments = useMemo(() => {
+    const segments: { trip: TripSummary; start: number; end: number }[] = [];
+    weekDays.forEach((d, index) => {
+      const trip = tripOnDate(trips, toDateStr(d));
+      const last = segments[segments.length - 1];
+      if (!trip) return;
+      if (last && last.trip.id === trip.id && last.end === index - 1) last.end = index;
+      else segments.push({ trip, start: index, end: index });
+    });
+    return segments;
+  }, [weekDays, trips]);
+
+  // Swiping up on the month folds it back to the week.
+  const monthGesture = useMemo(
+    () => Gesture.Pan()
+      .activeOffsetY([-14, 14])
+      .failOffsetX([-14, 14])
+      .onEnd(({ translationY, velocityY }) => {
+        if (translationY < -32 || velocityY < -480) scheduleOnRN(onToggleExpanded);
+      }),
+    [onToggleExpanded],
   );
 
   const selectDay = (str: string) => {
@@ -160,7 +207,8 @@ export function WeekStrip({
   const dayLabel = (d: Date, str: string) => {
     const status = planningStatus.get(str);
     const statusLabel = status === 'needs' ? ', needs a look' : status === 'planned' ? ', looks planned' : ', no events';
-    return `${str === todayStr ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${statusLabel}`;
+    const trip = tripOnDate(trips, str);
+    return `${str === todayStr ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${statusLabel}${trip ? `, ${tripDayLabel(trip, str)}` : ''}`;
   };
 
   const renderDay = (d: Date) => {
@@ -248,6 +296,19 @@ export function WeekStrip({
     );
   };
 
+  // The month grid carries the same span as a thin rule under the days.
+  const renderMonthTrip = (d: Date) => {
+    const str = toDateStr(d);
+    const trip = tripOnDate(trips, str);
+    if (!trip) return null;
+    return (
+      <View
+        pointerEvents="none"
+        style={[s.monthTrip, str === trip.startDate && s.monthTripStart, str === trip.endDate && s.monthTripEnd]}
+      />
+    );
+  };
+
   const renderGrid = (rows: (Date | null)[][], isCurrent: boolean) => (
     <View
       style={{ width: containerWidth }}
@@ -258,6 +319,7 @@ export function WeekStrip({
         <View key={ri} style={s.monthRow}>
           {row.map((d, ci) => (
             <View key={ci} style={s.monthCell}>
+              {d ? renderMonthTrip(d) : null}
               {d ? renderMonthDay(d) : null}
             </View>
           ))}
@@ -266,8 +328,11 @@ export function WeekStrip({
     </View>
   );
 
+  // Expanding cross-fades week and month while the strip's height eases to fit.
+  const revealIn = reducedMotion ? undefined : FadeIn.duration(motion.base).delay(motion.quick / 2).easing(REVEAL_EASING);
+  const revealOut = reducedMotion ? undefined : FadeOut.duration(motion.quick).easing(REVEAL_EASING);
   return (
-    <View style={s.root}>
+    <Animated.View style={s.root} layout={reducedMotion ? undefined : STRIP_LAYOUT}>
       <View style={s.header}>
         <PressableScale
           style={s.monthButtonOuter}
@@ -280,7 +345,9 @@ export function WeekStrip({
         >
           <Text style={s.monthTitle} numberOfLines={1}>{titleMonth}</Text>
           <Text style={s.yearLabel}>{titleYear}</Text>
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
+          <Animated.View style={chevronStyle}>
+            <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+          </Animated.View>
         </PressableScale>
         <View style={s.navRow}>
           {!todayVisible && (
@@ -296,6 +363,7 @@ export function WeekStrip({
       </View>
 
       {!expanded && (
+        <Animated.View entering={revealIn} exiting={revealOut}>
         <GestureDetector gesture={weekGesture}>
           <View style={s.days} onLayout={(e) => setDaysWidth(e.nativeEvent.layout.width)}>
             {cellWidth > 0 && (
@@ -304,12 +372,37 @@ export function WeekStrip({
             {weekDays.map((d) => renderDay(d))}
           </View>
         </GestureDetector>
+        {tripSegments.length > 0 && cellWidth > 0 && (
+        <View style={s.tripRow}>
+          {tripSegments.map(({ trip, start, end }) => {
+            const opens = toDateStr(weekDays[start]) === trip.startDate;
+            const closes = toDateStr(weekDays[end]) === trip.endDate;
+            // An open end runs to the strip's edge so the trip reads as continuing.
+            const left = start * cellWidth + (opens ? TRIP_INSET : 0);
+            const width = (end - start + 1) * cellWidth - (opens ? TRIP_INSET : 0) - (closes ? TRIP_INSET : 0);
+            return (
+              <View key={trip.id} style={[s.tripSegment, { left, width }]}>
+                <View style={[s.tripBar, opens && s.tripBarStart, closes && s.tripBarEnd]} />
+                <TouchableOpacity
+                  onPress={() => onOpenTrip?.(trip.id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Trip to ${trip.destination}. Open trip`}
+                >
+                  <Text style={s.tripLabel} numberOfLines={1}>{trip.destination}</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+        )}
+        </Animated.View>
       )}
 
       {expanded && (
-        <View
-          onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-        >
+        <Animated.View entering={revealIn} exiting={revealOut}>
+        <GestureDetector gesture={monthGesture}>
+          <View onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
           <View style={s.colHeaders}>
             {WEEKDAY_LETTERS.map((h, index) => (
               <Text key={index} style={s.colHeader}>{h}</Text>
@@ -333,8 +426,10 @@ export function WeekStrip({
             </ScrollView>
           )}
         </View>
+        </GestureDetector>
+        </Animated.View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -386,6 +481,15 @@ const s = StyleSheet.create({
   dotFilledSel: { backgroundColor: colors.primaryForeground },
   dotHollow: { borderWidth: 1, borderColor: colors.accentInk },
   dotHollowSel: { borderWidth: 1, borderColor: colors.primaryForeground },
+  tripRow: { height: 22, marginTop: spacing.xs },
+  tripSegment: { position: 'absolute', top: 0, gap: 3 },
+  tripBar: { height: 3, backgroundColor: colors.accentInk, opacity: 0.55 },
+  tripBarStart: { borderTopLeftRadius: 2, borderBottomLeftRadius: 2 },
+  tripBarEnd: { borderTopRightRadius: 2, borderBottomRightRadius: 2 },
+  tripLabel: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.accentInk },
+  monthTrip: { position: 'absolute', left: 0, right: 0, bottom: 2, height: 3, backgroundColor: colors.accentInk, opacity: 0.45 },
+  monthTripStart: { left: '22%', borderTopLeftRadius: 2, borderBottomLeftRadius: 2 },
+  monthTripEnd: { right: '22%', borderTopRightRadius: 2, borderBottomRightRadius: 2 },
   colHeaders: { flexDirection: 'row', marginBottom: 4 },
   colHeader: {
     flex: 1, textAlign: 'center',
@@ -395,7 +499,7 @@ const s = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   monthRow: { flexDirection: 'row', height: MONTH_ROW_HEIGHT, alignItems: 'center' },
-  monthCell: { flex: 1, alignItems: 'center' },
+  monthCell: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   compactOuter: { width: '100%' },
   compactBtn: { width: '100%', minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   monthCircle: {

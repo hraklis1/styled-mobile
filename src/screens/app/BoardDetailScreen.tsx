@@ -199,6 +199,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     navigation.getParent()?.navigate('Shop', {
       screen: 'ShoppingGallery',
       params: { returnTo: 'Closet' },
+      initial: false,
     });
   }, [isDailyFinds, navigation]);
 

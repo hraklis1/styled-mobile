@@ -195,6 +195,17 @@ export function heroPrompt(
   return `${high}°. ${occasionLine}`;
 }
 
+/** The hero's weather line, only when the day's weather changes what to wear. */
+export function heroWeatherNote(
+  forecast: Pick<ForecastWeather, 'condition' | 'tempMaxC' | 'tempMinC' | 'tempMaxF' | 'tempMinF'> | null | undefined,
+  unit: 'C' | 'F' = 'C',
+): string | null {
+  if (!forecast) return null;
+  const notable = forecast.condition === 'rainy' || forecast.condition === 'cold'
+    || forecast.tempMaxC < 8 || forecast.tempMaxC >= 24;
+  return notable ? heroPrompt('', forecast, unit) : null;
+}
+
 /** Whether a wear log already records this look on the event's day. */
 export function isLookWornOn(
   logs: { date: string; itemIds: number[] }[],

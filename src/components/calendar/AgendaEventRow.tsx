@@ -11,7 +11,9 @@ import type { Outfit } from '../../types/outfit';
 import { lentPiecesIn, lentPiecesLine } from '../../lib/lending';
 
 const SLOT = 60;
-const BANNER_SLOT = 28;
+// An unplanned slot is a quiet outline, smaller than a look, centred in the
+// same column so planned and unplanned rows still align.
+const EMPTY_SLOT = 44;
 
 /**
  * The look slot every agenda row ends in. A planned event shows its collage;
@@ -40,20 +42,19 @@ function LookSlot({
   onPlan: () => void;
 }) {
   const planned = presentCalendarEvent(event).hasOutfit;
-  const small = size < 44;
   // A past day shows what was actually worn, else what was planned. It never
   // invites planning, so an unplanned, unworn past event has no slot.
   const shownIds = past ? wornItemIds ?? (planned ? event.itemIds! : null) : planned ? event.itemIds! : null;
   if (past && !shownIds) return <View style={{ width: size }} />;
   const worn = !!wornItemIds;
   const pieces = shownIds?.length ?? 0;
+  const box = shownIds ? size : EMPTY_SLOT;
   return (
-    <View>
+    <View style={[s.slotColumn, { width: size }]}>
       <PressableScale
         onPress={shownIds ? (planned ? onOpenOutfit : onOpenDetail) : onPlan}
         scaleTo={0.94}
-        hitSlop={small ? (44 - size) / 2 : undefined}
-        contentStyle={[s.slot, { width: size, height: size }, !shownIds && s.slotEmpty]}
+        contentStyle={[s.slot, { width: box, height: box }, !shownIds && s.slotEmpty]}
         accessibilityRole="button"
         accessibilityLabel={shownIds
           ? `${worn ? 'Worn look' : 'View outfit'} for ${event.title}, ${pieces} pieces`
@@ -66,13 +67,13 @@ function LookSlot({
             // An outfit photo only stands for the planned pieces.
             outfit={shownIds === event.itemIds ? outfit : null}
             size={size}
-            borderRadius={small ? radii.sm : 10}
+            borderRadius={10}
           />
         ) : (
-          <Ionicons name="sparkles-outline" size={small ? 13 : 17} color={colors.accentInk} />
+          <Ionicons name="add" size={16} color={colors.stitch} />
         )}
       </PressableScale>
-      {worn && !small ? (
+      {worn ? (
         <View style={s.wornTag} pointerEvents="none">
           <Text style={s.wornTagText}>Worn</Text>
         </View>
@@ -92,6 +93,8 @@ type RowProps = {
   past?: boolean;
   /** Pieces logged as worn on the event's day, when there are any. */
   wornItemIds?: number[] | null;
+  /** Rows inside a day card draw no rule of their own; the card divides them. */
+  divider?: boolean;
 };
 
 function rowLabel(event: Event, when: string, past: boolean, worn: boolean): string {
@@ -101,13 +104,16 @@ function rowLabel(event: Event, when: string, past: boolean, worn: boolean): str
     .filter(Boolean).join(', ');
 }
 
-export function AgendaEventRow({ event, allItems, outfit, onPress, onOpenOutfit, onPlan, past = false, wornItemIds = null }: RowProps) {
-  const [clock, meridiem] = formatTime(new Date(event.date)).split(/\s/u);
+export function AgendaEventRow({ event, allItems, outfit, onPress, onOpenOutfit, onPlan, past = false, wornItemIds = null, divider = true }: RowProps) {
+  // An all-day event only gets a full row once it has a look.
+  const [clock, meridiem] = event.calendarMetadata?.allDay
+    ? ['All', 'day']
+    : formatTime(new Date(event.date)).split(/\s/u);
   const meta = [occasionDisplayLabel(event.occasion), event.location].filter(Boolean).join(' · ');
   // A planned piece someone else has right now: say so before the day comes.
   const lentLine = past ? null : lentPiecesLine(lentPiecesIn(event.itemIds, allItems));
   return (
-    <View style={s.row}>
+    <View style={[s.row, !divider && s.rowBare]}>
       <PressableScale
         style={s.main}
         contentStyle={s.mainContent}
@@ -137,25 +143,57 @@ export function AgendaEventRow({ event, allItems, outfit, onPress, onOpenOutfit,
   );
 }
 
-/** All-day events sit above a day's timed rows as one quiet line each. */
-export function AllDayBanner({ event, allItems, outfit, onPress, onOpenOutfit, onPlan, past = false, wornItemIds = null }: RowProps) {
-  const detail = [event.title, event.location].filter(Boolean).join(' · ');
+/**
+ * A day's all-day entries — shifts, trips, reminders — as one quiet line under
+ * the heading. They don't need a look, so there's no slot; several entries
+ * expand in place, one per line.
+ */
+export function AllDayLine({ events, past = false, expanded, onToggle, onPressEvent }: {
+  events: Event[];
+  past?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onPressEvent: (event: Event) => void;
+}) {
+  const detail = (event: Event) => [event.title, event.location].filter(Boolean).join(' · ');
+  if (events.length > 1 && expanded) {
+    return (
+      <View style={s.allDay}>
+        {events.map((event, index) => (
+          <PressableScale
+            key={event.id}
+            contentStyle={s.allDayContent}
+            onPress={() => onPressEvent(event)}
+            scaleTo={0.98}
+            accessibilityRole="button"
+            accessibilityLabel={`All day, ${detail(event)}`}
+            accessibilityHint="Opens event details"
+          >
+            <Text style={[s.allDayKicker, index > 0 && s.hidden]}>All day</Text>
+            <Text style={[s.allDayTitle, past && s.muted]} numberOfLines={1}>{detail(event)}</Text>
+          </PressableScale>
+        ))}
+      </View>
+    );
+  }
+  const single = events.length === 1;
   return (
-    <View style={s.banner}>
-      <PressableScale
-        style={s.main}
-        contentStyle={s.bannerContent}
-        onPress={onPress}
-        scaleTo={0.98}
-        accessibilityRole="button"
-        accessibilityLabel={rowLabel(event, 'All day', past, !!wornItemIds)}
-        accessibilityHint="Opens event details"
-      >
-        <Text style={s.bannerKicker}>All day</Text>
-        <Text style={[s.bannerTitle, past && s.muted]} numberOfLines={1}>{detail}</Text>
-      </PressableScale>
-      <LookSlot event={event} allItems={allItems} outfit={outfit} size={BANNER_SLOT} past={past} wornItemIds={wornItemIds} onOpenOutfit={onOpenOutfit} onOpenDetail={onPress} onPlan={onPlan} />
-    </View>
+    <PressableScale
+      style={s.allDay}
+      contentStyle={s.allDayContent}
+      onPress={single ? () => onPressEvent(events[0]) : onToggle}
+      scaleTo={0.98}
+      accessibilityRole="button"
+      accessibilityLabel={`All day, ${events.map(detail).join(', ')}`}
+      accessibilityHint={single ? 'Opens event details' : 'Shows each all-day event'}
+      accessibilityState={single ? undefined : { expanded: false }}
+    >
+      <Text style={s.allDayKicker}>All day</Text>
+      <Text style={[s.allDayTitle, past && s.muted]} numberOfLines={1}>
+        {single ? detail(events[0]) : events.map((event) => event.title).join(', ')}
+      </Text>
+      {single ? null : <Text style={s.allDayCount}>{events.length}</Text>}
+    </PressableScale>
   );
 }
 
@@ -170,16 +208,18 @@ const s = StyleSheet.create({
     borderBottomWidth: stroke.hairline,
     borderBottomColor: colors.hairline,
   },
+  rowBare: { borderBottomWidth: 0 },
   main: { flex: 1, minWidth: 0 },
   mainContent: { flexDirection: 'row', alignItems: 'flex-start', minHeight: 44 },
   timeCol: { width: 52, paddingTop: 2 },
   clock: { ...typography.text.label, ...tabular, color: colors.foreground },
   meridiem: { ...typography.text.caption, ...tabular, color: colors.mutedForeground },
   body: { flex: 1, minWidth: 0, gap: 3 },
-  title: { ...typography.text.editorialCard, color: colors.foreground },
+  title: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.foreground },
   meta: { ...typography.text.caption, color: colors.mutedForeground },
   lentLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lentText: { ...typography.text.caption, color: colors.accentInk, flexShrink: 1 },
+  slotColumn: { alignItems: 'center', justifyContent: 'center' },
   slot: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -202,18 +242,10 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
   },
   wornTagText: { fontSize: 9, lineHeight: 12, fontWeight: typography.weight.semibold, color: colors.foreground, letterSpacing: 0.3 },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    marginBottom: spacing.xs,
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
-  },
-  bannerContent: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 40 },
-  bannerKicker: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.accentInk },
-  bannerTitle: { ...typography.text.bodySmall, flex: 1, color: colors.foreground },
+  hidden: { opacity: 0 },
+  allDay: { paddingVertical: spacing.xs },
+  allDayContent: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 40 },
+  allDayKicker: { ...typography.text.caption, width: 52, fontWeight: typography.weight.semibold, color: colors.accentInk },
+  allDayTitle: { ...typography.text.bodySmall, flex: 1, color: colors.inkSubtle },
+  allDayCount: { ...typography.text.caption, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
 });

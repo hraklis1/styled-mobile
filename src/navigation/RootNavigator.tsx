@@ -519,7 +519,7 @@ function AppTabNavigator() {
                     key: 'shopping-camera',
                     label: 'Save a find',
                     icon: 'camera-outline',
-                    onPress: () => navigation.navigate('Shop', { screen: 'ShoppingCamera' }),
+                    onPress: () => navigation.navigate('Shop', { screen: 'ShoppingCamera', initial: false }),
                   },
                 ],
               });

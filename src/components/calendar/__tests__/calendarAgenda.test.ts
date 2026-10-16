@@ -131,3 +131,19 @@ describe('Home upcoming days', () => {
     expect(days[0].lookEvent).toBeNull();
   });
 });
+
+describe('heroEventFor', () => {
+  const { heroEventFor } = require('../calendarAgenda');
+  const ev = (id: number, date: string, extra: Record<string, unknown> = {}) => ({ id, title: `e${id}`, date, itemIds: null, ...extra });
+  const allDayOn = (day: string) => ({ calendarMetadata: { allDay: true, allDayDate: day } });
+  it('skips unplanned all-day entries for the first timed event', () => {
+    expect(heroEventFor([ev(1, '2026-10-13T00:00:00', allDayOn('2026-10-13')), ev(2, '2026-10-13T15:00:00')], '2026-10-13')?.id).toBe(2);
+  });
+  it('features an all-day entry once it has a look', () => {
+    expect(heroEventFor([ev(1, '2026-10-13T00:00:00', { ...allDayOn('2026-10-13'), itemIds: [3] })], '2026-10-13')?.id).toBe(1);
+  });
+  it('only looks at today and tomorrow', () => {
+    expect(heroEventFor([ev(1, '2026-10-14T09:00:00')], '2026-10-13')?.id).toBe(1);
+    expect(heroEventFor([ev(1, '2026-10-15T09:00:00')], '2026-10-13')).toBeNull();
+  });
+});

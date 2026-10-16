@@ -12,7 +12,7 @@ export function openWishlist(selectedId?: string, section: WishlistSection = 'pr
   const origin = returnTo ?? (navigationRef.getCurrentRoute()?.name === 'StylistMain' ? 'Stylist' : undefined);
   navigationRef.navigate('App', {
     screen: 'Shop',
-    params: { screen: 'Wishlist', params: { section, selectedId, returnTo: origin } },
+    params: { screen: 'Wishlist', params: { section, selectedId, returnTo: origin }, initial: false },
   });
 }
 

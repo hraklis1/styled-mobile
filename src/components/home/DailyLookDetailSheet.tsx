@@ -14,11 +14,13 @@ import { getSwatchColor } from '../../lib/colorUtils';
 import { colors, editorial, radii, spacing, stroke, typography } from '../../theme';
 import type { Outfit } from '../../types/outfit';
 import type { Item } from '../../types/item';
-import type { DailyLookCandidate } from '../../hooks/useDailyLook';
+import type { DailyLookBrief, DailyLookCandidate } from '../../hooks/useDailyLook';
 
 type Props = {
   visible: boolean;
   candidate: DailyLookCandidate | null;
+  /** Server-written caption; the sheet's look view leads with the same words as Home. */
+  brief?: DailyLookBrief | null;
   items: Item[];
   mode?: 'look' | 'suggestion';
   sessionKey?: number;
@@ -68,6 +70,7 @@ function sameSentence(a: string | null | undefined, b: string | null | undefined
 export function DailyLookDetailSheet({
   visible,
   candidate,
+  brief,
   items,
   mode = 'look',
   sessionKey = 0,
@@ -116,8 +119,8 @@ export function DailyLookDetailSheet({
   const ownedPieces = resolveBoardPieces(!isReady && gap ? candidate.foundationItemIds : candidate.itemIds, items);
   const isSuggestion = !hasFlatLay && !isReady && !!gap && mode === 'suggestion';
   const shoppingActive = isSuggestion || shoppingOpen;
-  const title = isSuggestion && gap ? sentenceCase(gap.label) : candidateTitle(candidate, gap);
-  const eyebrow = isSuggestion ? 'TO COMPLETE YOUR LOOK' : isReady ? 'Styled for you today' : 'Suggested addition';
+  const title = isSuggestion && gap ? sentenceCase(gap.label) : brief?.headline ?? candidateTitle(candidate, gap);
+  const eyebrow = isSuggestion ? 'TO COMPLETE YOUR LOOK' : brief?.basis ?? (isReady ? 'Styled for you today' : 'One piece away');
   const reason = capitalizeFirst(candidate.reason);
   const notes = candidate.stylistNotes && !sameSentence(candidate.stylistNotes, candidate.reason)
     ? capitalizeFirst(candidate.stylistNotes)
@@ -264,7 +267,7 @@ export function DailyLookDetailSheet({
               })}
             </View>
           ) : null}
-          {shoppingOpen && !isReady && !isSuggestion && gap ? <DailyLookShoppingOptions gap={gap} visible={visible} reason={reason} exploreRequest={exploreRequest} onAvailabilityChange={setShoppingAvailable} /> : null}
+          {shoppingOpen && !isSuggestion && gap ? <DailyLookShoppingOptions gap={gap} visible={visible} reason={reason} exploreRequest={exploreRequest} onAvailabilityChange={setShoppingAvailable} /> : null}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
@@ -292,6 +295,8 @@ export function DailyLookDetailSheet({
             </PressableScale>
           ) : null}
           <View style={isSuggestion ? styles.secondaryActions : undefined}>
+          {/* An owned-first look can still carry the soft gap it was built around. */}
+          {isReady && gap && !shoppingOpen ? <Pressable onPress={() => setShoppingOpen(true)} accessibilityRole="button" accessibilityLabel={`Find a ${gapLabel(gap.label)}, not in your closet`} style={({ pressed }) => [styles.dismiss, pressed && styles.dismissPressed]}><Text style={styles.dismissText}>{`Find a ${gapLabel(gap.label).toLowerCase()}`}</Text></Pressable> : null}
           {shoppingActive && !isReady ? <Pressable onPress={onFindPiece} accessibilityRole="button" accessibilityLabel="Read styling notes" style={({ pressed }) => [styles.dismiss, pressed && styles.dismissPressed]}><Text style={styles.dismissText}>Read styling notes</Text></Pressable> : null}
           <Pressable
             onPress={onDismiss}

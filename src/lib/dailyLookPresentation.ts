@@ -161,6 +161,8 @@ type ResolveInputBuilder = ContextRevisionInput & {
   history: DailyPickHistoryEntry[];
   rankedOutfitIds: number[];
   currentOutfitId?: number | null;
+  /** The unit Home displays, so the server-written brief matches it. */
+  tempUnit?: 'C' | 'F';
 };
 
 export function buildDailyLookResolveInput({
@@ -172,6 +174,7 @@ export function buildDailyLookResolveInput({
   history,
   rankedOutfitIds,
   currentOutfitId,
+  tempUnit,
   items,
   outfits,
   events,
@@ -196,6 +199,7 @@ export function buildDailyLookResolveInput({
     fallbackOutfitIds: rankedOutfitIds.slice(0, 30),
     clientContextRevision: buildDailyLookContextRevision({ items, outfits, events, weather, location }),
     currentOutfitId: currentOutfitId ?? null,
+    ...(tempUnit ? { tempUnit } : {}),
   };
 }
 

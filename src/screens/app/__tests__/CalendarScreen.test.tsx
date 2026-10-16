@@ -6,7 +6,7 @@ import type { Event } from '../../../types/event';
 jest.mock('@react-navigation/native', () => ({ useScrollToTop: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
-jest.mock('react-native-reanimated', () => ({ useReducedMotion: () => true }));
+jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: require('react-native').View }, useReducedMotion: () => true }));
 const mockScroll = jest.fn();
 jest.mock('@shopify/flash-list', () => {
   const React = require('react');
@@ -23,7 +23,7 @@ jest.mock('../../../components/primitives/ActionMenuSheet', () => ({ ActionMenuS
 jest.mock('../../../components/calendar/CalendarSyncSheet', () => ({ CalendarSyncSheet: 'CalendarSyncSheet' }));
 jest.mock('../../../components/calendar/WeekStrip', () => ({ WeekStrip: 'WeekStrip' }));
 jest.mock('../../../components/calendar/NextEventHero', () => ({ NextEventHero: 'NextEventHero' }));
-jest.mock('../../../components/calendar/AgendaEventRow', () => ({ AgendaEventRow: 'AgendaEventRow', AllDayBanner: 'AllDayBanner' }));
+jest.mock('../../../components/calendar/AgendaEventRow', () => ({ AgendaEventRow: 'AgendaEventRow', AllDayLine: 'AllDayLine' }));
 jest.mock('../../../components/calendar/EventFormModal', () => ({ EventFormModal: 'EventFormModal' }));
 jest.mock('../../../components/calendar/EventDetailModal', () => ({ EventDetailModal: 'EventDetailModal' }));
 jest.mock('../../../components/calendar/EventItemPickerModal', () => ({ EventItemPickerModal: 'EventItemPickerModal' }));
@@ -32,7 +32,8 @@ jest.mock('../../../hooks/useEntitlement', () => ({ useEntitlement: () => ({ isP
 jest.mock('../../../hooks/useActiveStylingLocation', () => ({ useActiveStylingLocation: () => ({ activeLocation: null }) }));
 jest.mock('../../../hooks/useItems', () => ({ useItems: () => ({ data: [] }) }));
 jest.mock('../../../hooks/useOutfits', () => ({ useOutfits: () => ({ data: [] }) }));
-jest.mock('../../../hooks/useTrips', () => ({ useTrips: () => ({ data: [] }) }));
+let mockTrips: any[] = [];
+jest.mock('../../../hooks/useTrips', () => ({ useTrips: () => ({ data: mockTrips }) }));
 jest.mock('../../../components/trips/TripDetailModal', () => ({ TripDetailModal: 'TripDetailModal' }));
 let mockLogs: { date: string; itemIds: number[] }[] = [];
 const mockCreateLog = jest.fn();
@@ -70,10 +71,11 @@ let renderer: TestRenderer.ReactTestRenderer;
 const nodes = (name: string) => renderer.root.findAllByType(name as any);
 const strip = () => nodes('WeekStrip')[0];
 const list = () => nodes('FlashList')[0];
+const scrollIntoHistory = () => act(() => { list().props.onScrollBeginDrag(); list().props.onStartReached(); });
 const texts = () => renderer.root.findAllByType(Text).map((node) => node.props.children);
 const rowTitles = () => list().props.data
-  .filter((item: any) => item.event)
-  .map((item: any) => `${item.kind}:${item.event.title}`);
+  .flatMap((item: any) => item.event ? [`${item.kind}:${item.event.title}`]
+    : item.events ? [`${item.kind}:${item.events.map((e: Event) => e.title).join('+')}`] : []);
 const button = (label: string) => renderer.root.findAllByType(TouchableOpacity).find((node) => node.props.accessibilityLabel === label);
 function render() {
   act(() => { renderer = TestRenderer.create(<CalendarScreen navigation={navigation as any} route={{ params: undefined } as any} />); });
@@ -89,6 +91,7 @@ const userScrollsTo = (date: string) => act(() => {
 });
 beforeEach(() => {
   mockLogs = [];
+  mockTrips = [];
   jest.useFakeTimers();
   jest.setSystemTime(new Date('2026-10-13T12:00:00'));
   mockEvents = [
@@ -101,11 +104,11 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => renderer?.unmount()); jest.useRealTimers(); jest.clearAllMocks(); });
 
-it('shows one timeline from today with the hero, all-day banners and timed rows, without mode tabs or counts', () => {
+it('shows one timeline from today with the hero, an all-day line and timed rows, without mode tabs or counts', () => {
   render();
   expect(rowTitles()).toEqual([
     'hero:Tuesday appointment',
-    'all-day:Wednesday all day',
+    'all-day-line:Wednesday all day',
     'event:Wednesday early',
     'event:Wednesday late',
   ]);
@@ -153,13 +156,20 @@ it('asks what was worn on an empty past day', () => {
   act(() => button('What did you wear on this day')!.props.onPress());
   expect(mockOpenLogger).toHaveBeenCalledWith({ date: '2026-10-08', quickStart: true });
 });
-it('shows what a past day actually wore and leaves unplanned past rows without a planning slot', () => {
+it('marks a past event worn only when its own planned look was logged', () => {
+  mockEvents.push(
+    event(6, 'Planned and worn', '2026-10-06T12:00:00', { itemIds: [7, 8] }),
+    event(7, 'Planned, other look worn', '2026-10-06T15:00:00', { itemIds: [9] }),
+  );
   mockLogs = [{ date: '2026-10-06', itemIds: [7, 8] }];
   render();
-  act(() => button('Show earlier days')!.props.onPress());
-  const past = nodes('AgendaEventRow').find((node) => node.props.event.id === 5)!;
-  expect(past.props.past).toBe(true);
-  expect(past.props.wornItemIds).toEqual([7, 8]);
+  scrollIntoHistory();
+  const row = (id: number) => nodes('AgendaEventRow').find((node) => node.props.event.id === id)!;
+  expect(row(5).props.past).toBe(true);
+  // A day's wear log is never pinned onto an event that didn't plan it.
+  expect(row(5).props.wornItemIds).toBeNull();
+  expect(row(6).props.wornItemIds).toEqual([7, 8]);
+  expect(row(7).props.wornItemIds).toBeNull();
   const future = nodes('AgendaEventRow').find((node) => node.props.event.id === 3)!;
   expect(future.props.past).toBe(false);
   expect(future.props.wornItemIds).toBeNull();
@@ -169,12 +179,15 @@ it('gives the month grid the lead piece of planned days', () => {
   // Item lookups are empty in this harness, so no planned day has an image.
   expect(strip().props.dayThumbs).toBeInstanceOf(Map);
 });
-it('reveals past days on request and loads them when the strip jumps back', () => {
+it('reveals past days on scroll-up and loads them when the strip jumps back', () => {
   render();
   expect(rowTitles()).not.toContain('event:Last week');
-  act(() => button('Show earlier days')!.props.onPress());
+  // Reaching the top without a drag (mount, tab re-tap) loads nothing.
+  act(() => list().props.onStartReached());
+  expect(rowTitles()).not.toContain('event:Last week');
+  scrollIntoHistory();
   expect(rowTitles()[0]).toBe('event:Last week');
-  expect(button('Show earlier days')).toBeUndefined();
+  expect(texts()).not.toContain('Show earlier');
 
   act(() => renderer.unmount());
   render(); select('2026-10-06');
@@ -186,7 +199,7 @@ it('says the calendar is clear when only past events remain', () => {
   render();
   expect(texts()).toContain('Your calendar is clear');
   expect(nodes('NextEventHero')).toHaveLength(0);
-  act(() => button('Show earlier days')!.props.onPress());
+  scrollIntoHistory();
   expect(rowTitles()).toEqual(['event:Past appointment']);
 });
 it('collapses month selection to the selected week and Today returns to today', () => {
@@ -262,4 +275,49 @@ it('logs today\'s planned look as worn once, then reports it worn', () => {
   mockLogs = [{ date: '2026-10-13', itemIds: [2, 1] }];
   render();
   expect(nodes('NextEventHero')[0].props.worn).toBe(true);
+});
+
+const trip = (extra: Record<string, unknown> = {}) => ({
+  id: 7, destination: 'Lisbon', startDate: '2026-10-14', endDate: '2026-10-16',
+  looks: 3, packed: 0, packable: 7, eventId: null, eventDatesChanged: false, ...extra,
+});
+it('pins day headings and names the trip in them instead of a band', () => {
+  mockTrips = [trip()];
+  render();
+  const data = list().props.data;
+  expect(list().props.stickyHeaderIndices).toEqual(
+    data.flatMap((item: any, index: number) => (item.kind === 'day-heading' ? [index] : [])),
+  );
+  expect(texts()).toContain('Leaving for Lisbon · 0 of 7 packed');
+  act(() => button('Leaving for Lisbon · 0 of 7 packed. Open trip')!.props.onPress());
+  expect(nodes('TripDetailModal')[0].props.tripId).toBe(7);
+  expect(strip().props.trips).toEqual(mockTrips);
+});
+it('hides the calendar event a trip plan was made from on the trip days', () => {
+  mockEvents.push(event(8, 'Lisbon trip', '2026-10-15T00:00:00', allDay('2026-10-15')));
+  mockTrips = [trip({ eventId: 8 })];
+  render();
+  expect(rowTitles().join(' ')).not.toContain('Lisbon trip');
+});
+it('features no all-day shift and offers a quiet prompt on an all-day-only today', () => {
+  mockEvents = [event(1, 'Shift', '2026-10-13T00:00:00', allDay('2026-10-13')), event(2, 'Next week dinner', '2026-10-20T19:00:00')];
+  render();
+  expect(nodes('NextEventHero')).toHaveLength(0);
+  expect(list().props.data.map((item: any) => item.kind)).toContain('today-prompt');
+  act(() => button('Log what you wore today')!.props.onPress());
+  expect(mockOpenLogger).toHaveBeenCalledWith({ date: '2026-10-13', quickStart: true });
+});
+it('leads with the trip on a departure day with nothing timed', () => {
+  mockEvents = [event(1, 'Shift', '2026-10-14T00:00:00', allDay('2026-10-14'))];
+  mockTrips = [trip()];
+  render();
+  expect(list().props.data[0].kind).toBe('trip-hero');
+});
+it('adds an event or a trip from the add button', () => {
+  render();
+  act(() => strip().props.onAddEvent());
+  const sheet = nodes('ActionMenuSheet').find((node) => node.props.title === 'Add to your calendar')!;
+  expect(sheet.props.visible).toBe(true);
+  act(() => sheet.props.options[1].onPress());
+  expect(mockOpenStylist).toHaveBeenCalledWith(expect.objectContaining({ workflow: expect.objectContaining({ kind: 'trip' }) }));
 });

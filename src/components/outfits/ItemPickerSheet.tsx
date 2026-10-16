@@ -11,7 +11,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -209,8 +209,11 @@ export function ItemPickerSheet({
     (screenWidth - PICKER_H_PAD * 2 - PICKER_GAP * (PICKER_COLS - 1)) / PICKER_COLS;
   const cardHeight = cardWidth * 1.3;
 
+  // Explicit insets: inline in a transparent Modal, SafeAreaView reports no top inset
+  // and the header slides under the status bar. A pageSheet needs no top inset.
+  const insets = useSafeAreaInsets();
   const pickerContent = (
-    <SafeAreaView style={styles.modal} edges={['top', 'bottom']}>
+    <View style={[styles.modal, { paddingTop: inline ? insets.top : 0, paddingBottom: insets.bottom }]}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={handleClose}
@@ -409,7 +412,7 @@ export function ItemPickerSheet({
             );
           }}
         />
-    </SafeAreaView>
+    </View>
   );
 
   if (inline) return visible ? pickerContent : null;

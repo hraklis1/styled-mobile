@@ -5,14 +5,14 @@ import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
 import { EventLookCollage } from './EventLookCollage';
-import { formatTime, toDateStr, OCCASION_ICONS } from './calendarUtils';
+import { formatTime, toDateStr } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
 import { eventDayKey } from './calendarAgenda';
 import { getEventPlanActionLabel } from './calendarPlanning';
-import { presentCalendarEvent, occasionDisplayLabel, heroCountdown, heroPrompt, WEATHER_ICONS } from './calendar-presentation';
+import { presentCalendarEvent, occasionDisplayLabel, heroCountdown, heroWeatherNote, WEATHER_ICONS } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
 
 const CARD_PADDING = spacing.lg;
@@ -96,14 +96,15 @@ export function NextEventHero({
   const pieceCount = event.itemIds?.length ?? 0;
   const isToday = day === toDateStr(new Date());
   const countdown = heroCountdown(event);
-  const prompt = heroPrompt(event.occasion, forecast.data, tempUnit);
 
-  const chips: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
-    // The overline already says "All day"; a chip would repeat it.
-    ...(allDay ? [] : [{ key: 'time', icon: 'time-outline' as const, label: formatTime(new Date(event.date)) }]),
-    { key: 'occasion', icon: (OCCASION_ICONS[event.occasion] ?? 'pricetag-outline') as keyof typeof Ionicons.glyphMap, label: occasionDisplayLabel(event.occasion) },
-    ...(forecast.data ? [{ key: 'weather', icon: WEATHER_ICONS[forecast.data.condition], label: formatTempRange(forecast.data, tempUnit) }] : []),
-  ];
+  // One meta line instead of chips: the overline already says when.
+  const meta = [
+    allDay ? null : formatTime(new Date(event.date)),
+    occasionDisplayLabel(event.occasion),
+    forecast.data ? formatTempRange(forecast.data, tempUnit) : null,
+  ].filter(Boolean).join(' · ');
+  // Only weather worth acting on earns a sentence.
+  const weatherNote = heroWeatherNote(forecast.data, tempUnit);
 
   return (
     <View style={s.card}>
@@ -135,29 +136,29 @@ export function NextEventHero({
       >
         <Text style={s.overline} numberOfLines={1}>{countdown}</Text>
         <Text style={s.title} numberOfLines={2}>{event.title}</Text>
-        <View style={s.chips}>
-          {chips.map((chip) => (
-            <View key={chip.key} style={s.chip}>
-              <Ionicons name={chip.icon} size={13} color={colors.mutedForeground} />
-              <Text style={s.chipText}>{chip.label}</Text>
-            </View>
-          ))}
+        <View style={s.metaRow}>
+          {forecast.data ? <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={13} color={colors.mutedForeground} /> : null}
+          <Text style={s.meta} numberOfLines={1}>{meta}</Text>
         </View>
         {event.location ? <Text style={s.location} numberOfLines={1}>{event.location}</Text> : null}
-        <Text style={s.prompt}>{prompt}</Text>
+        {weatherNote ? <Text style={s.prompt}>{weatherNote}</Text> : null}
       </PressableScale>
 
       <View style={s.actions}>
         {!hasOutfit ? (
-          <HeroButton
-            variant="primary"
-            icon="sparkles-outline"
-            label={isPlanning ? 'Styling…' : 'Plan my look'}
+          <PressableScale
+            style={s.planOuter}
+            contentStyle={s.plan}
             onPress={onPlanOutfit}
             disabled={isPlanning}
-            busy={isPlanning}
+            accessibilityRole="button"
             accessibilityLabel={isPlanning ? `Styling an outfit for ${event.title}` : `${getEventPlanActionLabel(false)} for ${event.title}`}
-          />
+            accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
+          >
+            {isPlanning ? <ActivityIndicator size="small" color={colors.foreground} /> : <Ionicons name="sparkles-outline" size={15} color={colors.foreground} />}
+            <Text style={s.planText}>{isPlanning ? 'Styling…' : 'Plan look'}</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.foreground} />
+          </PressableScale>
         ) : isToday && onWear ? (
           <>
             <HeroButton
@@ -207,20 +208,20 @@ const s = StyleSheet.create({
     gap: spacing.md,
     borderRadius: 20,
     borderCurve: 'continuous',
-    backgroundColor: colors.accent,
+    // Tan is the trip colour; an event card stays neutral.
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   collage: { overflow: 'hidden', borderRadius: radii.lg, borderCurve: 'continuous' },
   caption: { gap: spacing.xs },
   overline: { ...typography.text.eyebrowLarge, color: colors.accentInk },
   title: { ...typography.text.editorialTitle, color: colors.foreground },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    minHeight: 28, paddingHorizontal: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  chipText: { ...typography.text.caption, color: colors.foreground, fontWeight: typography.weight.medium },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  meta: { ...typography.text.caption, color: colors.mutedForeground, fontWeight: typography.weight.medium, flexShrink: 1 },
+  planOuter: { marginLeft: 'auto' },
+  plan: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  planText: { ...typography.text.label, color: colors.foreground },
   location: { ...typography.text.caption, color: colors.mutedForeground, marginTop: 2 },
   prompt: { ...typography.text.bodySmall, color: colors.inkSubtle, marginTop: spacing.xs },
   actions: { flexDirection: 'row', gap: spacing.sm },
